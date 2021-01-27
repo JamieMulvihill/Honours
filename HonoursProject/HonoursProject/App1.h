@@ -66,6 +66,7 @@ private:
 	ID3D11ShaderResourceView* computeResultTemp;
 
 	bool hasStarted;
+	bool isTesting;
 };
 
 #endif

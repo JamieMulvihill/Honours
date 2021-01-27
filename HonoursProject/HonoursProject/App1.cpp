@@ -22,6 +22,7 @@ void App1::init(HINSTANCE hinstance, HWND hwnd, int screenWidth, int screenHeigh
 	textureMgr->loadTexture(L"bunny", L"res/bunny.png");
 
 	hasStarted = false;
+	isTesting = false;
 
 	textureShader = new TextureShader(renderer->getDevice(), hwnd);
 	depthShader = new DepthShader(renderer->getDevice(), hwnd);
