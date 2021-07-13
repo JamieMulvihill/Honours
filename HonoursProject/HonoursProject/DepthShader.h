@@ -26,6 +26,7 @@ public:
 
 private:
 	void initShader(const wchar_t* vs, const wchar_t* ps);
+	void initShader(const wchar_t* vsFilename, const wchar_t* hsFilename, const wchar_t* dsFilename, const wchar_t* psFilename);
 
 private:
 	ID3D11Buffer* matrixBuffer;

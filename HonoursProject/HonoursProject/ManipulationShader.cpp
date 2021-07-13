@@ -55,9 +55,9 @@ void ManipulationShader::initShader(const wchar_t* vsFilename, const wchar_t* ps
 
 	// Create a texture sampler state description.
 	samplerDesc.Filter = D3D11_FILTER_ANISOTROPIC;
-	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 	samplerDesc.MipLODBias = 0.0f;
 	samplerDesc.MaxAnisotropy = 1;
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
@@ -87,7 +87,7 @@ void ManipulationShader::initShader(const wchar_t* vsFilename, const wchar_t* ps
 	renderer->CreateBuffer(&lightBufferDesc, NULL, &lightBuffer);
 }
 
-void ManipulationShader::setShaderParameters(ID3D11DeviceContext* deviceContext, const XMMATRIX& worldMatrix, const XMMATRIX& viewMatrix, const XMMATRIX& projectionMatrix, ID3D11ShaderResourceView* textureHeight, ID3D11ShaderResourceView* textureTex, ID3D11ShaderResourceView* textureDepth, float scale, Light* light)
+void ManipulationShader::setShaderParameters(ID3D11DeviceContext* deviceContext, const XMMATRIX& worldMatrix, const XMMATRIX& viewMatrix, const XMMATRIX& projectionMatrix, ID3D11ShaderResourceView* textureHeight, ID3D11ShaderResourceView* textureTex, float scale, Light* light)
 {
 	HRESULT result;
 	D3D11_MAPPED_SUBRESOURCE mappedResource;
@@ -131,12 +131,8 @@ void ManipulationShader::setShaderParameters(ID3D11DeviceContext* deviceContext,
 	// Set shader texture resource in the pixel shader.
 	deviceContext->PSSetShaderResources(0, 1, &textureTex);
 	deviceContext->PSSetSamplers(0, 1, &sampleState);
-	deviceContext->PSSetShaderResources(1, 1, &textureDepth);
-	deviceContext->PSSetSamplers(0, 1, &sampleState);
 
 	/// Set shader texture resource in the pixel shader.
 	deviceContext->VSSetShaderResources(0, 1, &textureHeight);
-	deviceContext->VSSetSamplers(0, 1, &sampleState);
-	deviceContext->VSSetShaderResources(1, 1, &textureDepth);
 	deviceContext->VSSetSamplers(0, 1, &sampleState);
 }

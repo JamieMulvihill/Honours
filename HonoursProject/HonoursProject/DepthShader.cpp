@@ -3,7 +3,7 @@
 
 DepthShader::DepthShader(ID3D11Device* device, HWND hwnd) : BaseShader(device, hwnd)
 {
-	initShader(L"depth_vs.cso", L"depth_ps.cso");
+	initShader(L"depth_vs.cso"/*, L"depth_hs.cso", L"depth_ds.cso"*/, L"depth_ps.cso");
 }
 
 DepthShader::~DepthShader()
@@ -20,6 +20,16 @@ DepthShader::~DepthShader()
 	{
 		layout->Release();
 		layout = 0;
+	}
+	if (sampleState)
+	{
+		sampleState->Release();
+		sampleState = 0;
+	}
+	if (timeBuffer)
+	{
+		timeBuffer->Release();
+		timeBuffer = 0;
 	}
 
 	//Release base shader components
@@ -47,14 +57,15 @@ void DepthShader::initShader(const wchar_t* vsFilename, const wchar_t* psFilenam
 
 	// Create a texture sampler state description.
 	samplerDesc.Filter = D3D11_FILTER_ANISOTROPIC;
-	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 	samplerDesc.MipLODBias = 0.0f;
 	samplerDesc.MaxAnisotropy = 1;
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	// Create the texture sampler state.
 	renderer->CreateSamplerState(&samplerDesc, &sampleState);
 
 	timeBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
@@ -65,6 +76,17 @@ void DepthShader::initShader(const wchar_t* vsFilename, const wchar_t* psFilenam
 	timeBufferDesc.StructureByteStride = 0;
 	renderer->CreateBuffer(&timeBufferDesc, NULL, &timeBuffer);
 
+}
+
+
+void DepthShader::initShader(const wchar_t* vsFilename, const wchar_t* hsFilename, const wchar_t* dsFilename, const wchar_t* psFilename)
+{
+	// InitShader must be overwritten and it will load both vertex and pixel shaders + setup buffers
+	initShader(vsFilename, psFilename);
+
+	// Load other required shaders.
+	loadHullShader(hsFilename);
+	loadDomainShader(dsFilename);
 }
 
 void DepthShader::setShaderParameters(ID3D11DeviceContext* deviceContext, const XMMATRIX &worldMatrix, const XMMATRIX &viewMatrix, const XMMATRIX &projectionMatrix, ID3D11ShaderResourceView* textureHeight, ID3D11ShaderResourceView* textureTex, ID3D11ShaderResourceView* textureDepth, float scale)
@@ -94,12 +116,11 @@ void DepthShader::setShaderParameters(ID3D11DeviceContext* deviceContext, const 
 	deviceContext->VSSetConstantBuffers(1, 1, &timeBuffer);
 
 	// Set shader texture resource in the pixel shader.
-	deviceContext->PSSetShaderResources(0, 1, &textureTex);
-	deviceContext->PSSetSamplers(0, 1, &sampleState);
+	//deviceContext->PSSetShaderResources(0, 1, &textureTex);
+	//deviceContext->PSSetSamplers(0, 1, &sampleState);
 
 	/// Set shader texture resource in the pixel shader.
 	deviceContext->VSSetShaderResources(0, 1, &textureHeight);
-	deviceContext->VSSetSamplers(5, 1, &sampleState);
 	deviceContext->VSSetShaderResources(1, 1, &textureDepth);
 	deviceContext->VSSetSamplers(0, 1, &sampleState);
 }

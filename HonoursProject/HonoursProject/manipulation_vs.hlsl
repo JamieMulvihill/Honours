@@ -2,7 +2,6 @@
 // Light vertex shader
 // Standard issue vertex shader, apply matrices, pass info to pixel shader
 Texture2D texture0 : register(t0);
-Texture2D texture1 : register(t1);
 SamplerState sampler0 : register(s0);
 
 cbuffer MatrixBuffer : register(b0)
@@ -48,8 +47,10 @@ OutputType main(InputType input)
 {
 	OutputType output;
 
+	float yPos;
 	// Calculate the position of the vertex against the world, view, and projection matrices.
 	output.position = mul(ApplyHeightMap(input.position, input.normal, input.tex, scale.x), worldMatrix);
+	yPos = output.position.y;
 	output.position = mul(output.position, viewMatrix);
 	output.position = mul(output.position, projectionMatrix);
 
@@ -57,7 +58,7 @@ OutputType main(InputType input)
 	output.tex = input.tex;
 
 	////sobel calculation for normals
-	float2 pixelSize = float2(1.f / 1024, 1.f / 1024);
+	float2 pixelSize = float2(1.f / 1024, 1.f /1024 );
 	
 	// computing pixel offset values
 	float2 topLeft = output.tex + float2(-pixelSize.x, -pixelSize.y);
@@ -71,7 +72,7 @@ OutputType main(InputType input)
 	float2 bottomCentre = output.tex + float2(0, pixelSize.y);
 	float2 bottomRight = output.tex + float2(pixelSize.x, pixelSize.y);
 	
-	float scale = 3;
+	float scale = 1;
 	
 	// apply sobel filter to surrounding current pixel
 	float resTopLeft = scale * texture0.SampleLevel(sampler0, topLeft, 0).r;
@@ -91,10 +92,14 @@ OutputType main(InputType input)
 	
 	//Generate the so far missing Z values
 	float Gz = 0.5f * sqrt(max(0.f, 1.f - Gx * Gx - Gy * Gy));
-	
-	output.normal = normalize(float3(2.f * Gx, Gz, 2.f * Gy));
-	output.normal = mul(output.normal, (float3x3)worldMatrix);
-	output.normal = normalize(output.normal);
+
+	float3 testNormal;
+	testNormal.x = yPos * -(resBottomRight - resBottomLeft + 2 * (resCentreRight - resCentreLeft) + resTopRight - resTopLeft);
+	testNormal.y = yPos * -(resTopLeft - resBottomLeft + 2 * (resTopCentre - resBottomCentre) + resTopRight - resBottomRight);
+	testNormal.z = 1.0 / 4;
+	testNormal = normalize(testNormal);
+	output.normal = float3(testNormal.y, testNormal.z, testNormal.x);
+
 
 	return output;
 }

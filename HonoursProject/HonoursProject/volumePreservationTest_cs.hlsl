@@ -1,24 +1,35 @@
 //--------------------------------------------------------------------------------------
 // https://github.com/walbourn/directx-sdk-samples/blob/master/BasicCompute11/BasicCompute11.hlsl
-// this is not the final shader, this the code to read from two buffers and add the values
-// before writing to a structured buffer, I am trying to read and sum the values from a 
-// texture and write to a buffer, using this as guide, attepmting to implement this first
-// and adapt and change for programs needs after
 //--------------------------------------------------------------------------------------
 
-struct BufType
+struct Data
 {
-    int i;
-    float f; 
+	float4 texel;
 };
 
-StructuredBuffer<BufType> Buffer0 : register(t0);
-StructuredBuffer<BufType> Buffer1 : register(t1);
-RWStructuredBuffer<BufType> BufferOut : register(u0);
+Texture2D heightMap : register(t0);
+RWStructuredBuffer<Data> gOutput;
 
-[numthreads(1, 1, 1)]
-void main(uint3 DTid : SV_DispatchThreadID)
+#define cacheSize 1024
+groupshared float4 gCache[cacheSize];
+
+[numthreads(32, 32, 1)]
+void main(int3 groupThreadID : SV_GroupThreadID, int3 dispatchThreadID : SV_DispatchThreadID, int3 groupID : SV_GroupID)
 {
-    BufferOut[DTid.x].i = Buffer0[DTid.x].i + Buffer1[DTid.x].i;
-    BufferOut[DTid.x].f = Buffer0[DTid.x].f + Buffer1[DTid.x].f;
+	int groupIDPosition = groupThreadID.y * 32 + groupThreadID.x;
+	int groupPosition = groupID.y * 32 + groupID.x;
+	gCache[groupIDPosition] = heightMap[dispatchThreadID.xy];
+
+	// Wait for all threads in group to finish.
+	GroupMemoryBarrierWithGroupSync();
+
+	float currentVolume = 0.f;
+	
+	// Increment value of current volume by every value in the cache
+	for (int i = 0; i < cacheSize; i++) {
+		currentVolume += gCache[i].x;
+	}
+	
+	// Last thread in each group will overwrite to group position in buffer
+	gOutput[groupPosition].texel = float4(currentVolume, 0, 0, 1);
 }

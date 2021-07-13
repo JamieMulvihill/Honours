@@ -76,6 +76,11 @@ void GPUProfiler::EndFrame()
 
 void GPUProfiler::DataWaitandUpdate()
 {
+
+	QueryPerformanceCounter(&time);
+	QueryPerformanceFrequency(&frequency);
+	double timeInMilli = (double)time.QuadPart * 1000.0 / (double)frequency.QuadPart;
+
 	if (frameCollect < 0)
 	{
 		// Haven't run enough frames yet to have data
@@ -117,16 +122,13 @@ void GPUProfiler::DataWaitandUpdate()
 
 	++avgFrameCount;
 
-	QueryPerformanceCounter(&time);
-	QueryPerformanceFrequency(&frequency);
-	double timeInMilli = (double)time.QuadPart * 1000.0 / (double)frequency.QuadPart;
-
 	if (timeInMilli > avgBeginTime + 0.5)
 	{
 		for (TIMESTAMP timestamp = TIMESTAMP_BEGIN; timestamp < TIMESTAMP_TOTAL; timestamp = TIMESTAMP(timestamp + 1))
 		{
 			avgFrameTiming[timestamp] = avgTotalTimes[timestamp] / avgFrameCount;
 			avgTotalTimes[timestamp] = 0.0f;
+			
 		}
 
 		avgFrameCount = 0;

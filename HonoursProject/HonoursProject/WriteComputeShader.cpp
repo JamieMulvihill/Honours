@@ -51,9 +51,9 @@ void WriteComputeShader::createOutputUAV()
 	renderer->CreateShaderResourceView(m_tex, &srvDesc, &m_srvTexOutput);
 }
 
-void WriteComputeShader::setShaderParameters(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* deformationMap)
+void WriteComputeShader::setShaderParameters(ID3D11DeviceContext* dc,ID3D11ShaderResourceView* displacementMap)
 {
-	dc->CSSetShaderResources(0, 1, &deformationMap);
+	dc->CSSetShaderResources(0, 1, &displacementMap);
 	dc->CSSetUnorderedAccessViews(0, 1, &m_uavAccess, 0);
 }
 

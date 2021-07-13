@@ -11,7 +11,7 @@ public:
 	ComputeShader(ID3D11Device* device, HWND hwnd, int w, int h);
 	~ComputeShader();
 
-	void setShaderParameters(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* heightMap, ID3D11ShaderResourceView* deformationMap);
+	void setShaderParameters(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* heightMap);
 	void createOutputUAV();
 	ID3D11ShaderResourceView* getSRV() { return m_srvTexOutput; };
 	void unbind(ID3D11DeviceContext* dc);

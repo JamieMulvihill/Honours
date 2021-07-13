@@ -11,13 +11,18 @@ enum TIMESTAMP {
 
 	TIMESTAMP_BEGIN,
 	TIMESTAMP_DEPTH,
-	TIMESTAMP_COMPUTE_WRITE,
 	TIMESTAMP_COMPUTE_READ,
+	TIMESTAMP_COMPUTE_PENETRATION,
+	TIMESTAMP_COMPUTE_JUMPFLOOD,
+	TIMESTAMP_COMPUTE_DISPLACE,
+	TIMESTAMP_COMPUTE_VOLUMEPRESERVE,
+	TIMESTAMP_COMPUTE_WRITE,
 	TIMESTAMP_SCENE,
 	TIMESTAMP_END,
 
 	TIMESTAMP_TOTAL
 };
+
 
 class GPUProfiler
 {
@@ -34,7 +39,6 @@ public:
 	void DataWaitandUpdate();
 
 	float GetTimings(TIMESTAMP ts){ return frameTiming[ts]; }
-
 	
 	float GetAvgTimings(TIMESTAMP timestamp) { return avgFrameTiming[timestamp]; }
 protected:

@@ -10,7 +10,7 @@ public:
 	WriteComputeShader(ID3D11Device* device, HWND hwnd, int w, int h);
 	~WriteComputeShader();
 
-	void setShaderParameters(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* deformationMap);
+	void setShaderParameters(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* displacementMap);
 	void createOutputUAV();
 	ID3D11ShaderResourceView* getSRV() { return m_srvTexOutput; };
 	void unbind(ID3D11DeviceContext* dc);

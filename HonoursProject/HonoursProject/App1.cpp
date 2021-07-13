@@ -13,48 +13,68 @@ void App1::init(HINSTANCE hinstance, HWND hwnd, int screenWidth, int screenHeigh
 
 	// Create Mesh object and shader object
 	mesh = new PlaneMesh(renderer->getDevice(), renderer->getDeviceContext());
-	model = new Model(renderer->getDevice(), renderer->getDeviceContext(), "res/teapot.obj");
-	textureMgr->loadTexture(L"brick", L"res/brick1.dds");
-	textureMgr->loadTexture(L"snow", L"res/snowtex.png");
-	textureMgr->loadTexture(L"snowheight", L"res/snowheight.png");
-	textureMgr->loadTexture(L"black", L"res/black.png");
-	textureMgr->loadTexture(L"height", L"res/height.png");
-	textureMgr->loadTexture(L"bunny", L"res/bunny.png");
+	model = new Model(renderer->getDevice(), renderer->getDeviceContext(), "res/Teapot.obj");
+	shoeA = new Model(renderer->getDevice(), renderer->getDeviceContext(), "res/3DShoe.obj");
+	shoeB = new Model(renderer->getDevice(), renderer->getDeviceContext(), "res/3DShoeLeft.obj");
 
-	hasStarted = false;
-	isTesting = false;
+	textureMgr->loadTexture(L"black", L"res/black.png");
+	textureMgr->loadTexture(L"surface", L"res/Sand512Tile.png");
+	textureMgr->loadTexture(L"grey", L"res/Grey.png");
+
+	hasReset = false;
+	volumePong = false;
+	inIterativeDisplacement = true;
+	inDemo = false;
+
+	threadCountHeight = 32;
+	threadCountWidth = 32;
+	sWidth = threadCountWidth * threadCountHeight;
+	sHeight = threadCountHeight * threadCountWidth;
 
 	textureShader = new TextureShader(renderer->getDevice(), hwnd);
 	depthShader = new DepthShader(renderer->getDevice(), hwnd);
 	manipulationShader = new ManipulationShader(renderer->getDevice(), hwnd);
-	computeShader = new ComputeShader(renderer->getDevice(), hwnd, screenWidth, screenHeight);
-	writeComputeShader = new WriteComputeShader(renderer->getDevice(), hwnd, screenWidth, screenHeight);
-	vpTestShader = new VolumePreservationTestShader(renderer->getDevice(), hwnd, screenWidth, screenHeight);
+	computeShader = new ComputeShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	writeComputeShader = new WriteComputeShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	displacementShader = new DisplacementShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	displacementMethodBShader = new DisplacementMethodBShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	penetrationShader = new PenetrationShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	jumpFloodingShader = new JumpFloodingShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	pongJumpFLoodShader = new PongJumpFloodShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	jumpFloodInitShader = new JumpFloodInitializer(renderer->getDevice(), hwnd, sWidth, sHeight);
+	volumePreservationShader = new VolumePreservationShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	volumePreservationPongShader = new VolumePreservationPongShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	normalMapShader = new NormalMapShader(renderer->getDevice(), hwnd, sWidth, sHeight);
+	vpTestShader = new VolumePreservationTestShader(renderer->getDevice(), hwnd, sWidth, sHeight);
 
-	orthoMesh = new OrthoMesh(renderer->getDevice(), renderer->getDeviceContext(), screenWidth/4, screenHeight/4, screenWidth * .35f, screenHeight * .35f);
 	orthoMeshLeft = new OrthoMesh(renderer->getDevice(), renderer->getDeviceContext(), screenWidth/4, screenHeight/4, -screenWidth * .35f, -screenHeight * .35f);
 
 	gpuProfiler = new GPUProfiler;
 	gpuProfiler->Init(renderer->getDeviceContext(), renderer->getDevice());
-	
-	int sceneWidth = 100;
-	int sceneHeight = 100;
-	
-	renderTexture = new RenderTexture(renderer->getDevice(), screenWidth, screenHeight, SCREEN_NEAR, SCREEN_DEPTH);
-	deformationMap = new DeformationMap(renderer->getDevice(), screenWidth, screenHeight);
+
+	footprintPositionA = XMFLOAT4(20, 0, -10, 0);
+	footprintPositionB = XMFLOAT4(10, 12.1, -30, 0);
+	heightA = 0;
+	heightB = 12.1;
+
+	deformationMap = new DeformationMap(renderer->getDevice(), sWidth, sHeight);
 	
 	lightX = 39.f;
 	lightY = -48.f;
 	lightZ = 7.f;
 	lightDirX = 0.f;
 	lightDirY = 1.f;
-	scale = 6.f;
+	scale = 4.f;
 	newLightDirX = 0.5f;
 	newLightDirY = -.9f;
-	newLightDirZ = .5f;
+	newLightDirZ = 0.5f;
 	teapotX = 35.f;
-	teapotY = 5.f;
+	teapotY = 4.f;
 	teapotZ = -60.f;
+	heightTreshold = 0.695f;
+
+	int sceneWidth = 100;
+	int sceneHeight = 100;
 
 	light = new Light;
 	light->setDiffuseColour(.0f, .0f, .0f, 1.0f);
@@ -74,11 +94,6 @@ void App1::init(HINSTANCE hinstance, HWND hwnd, int screenWidth, int screenHeigh
 	depthDirY = 0;
 	depthDirZ = 0;
 
-	blackCamera = new Camera;
-	blackCamera->setPosition(depthLightX, depthLightY, depthLightZ);
-	blackCamera->setRotation(depthDirX, depthDirY, depthDirZ);
-	blackCamera->update();
-
 	depthCamera = new DepthCamera(input, sWidth, sHeight, wnd);
 	depthCamera->setPos(depthLightX, depthLightY, depthLightZ);
 	depthCamera->setRot(depthDirX, depthDirY, depthDirZ);
@@ -89,7 +104,7 @@ App1::~App1()
 {
 	// Run base application deconstructor
 	BaseApplication::~BaseApplication();
-
+	gpuProfiler->Stop();
 }
 
 
@@ -110,6 +125,10 @@ bool App1::frame()
 	depthCamera->setRot(depthDirX, depthDirY, depthDirZ);
 	directionalLight->setDirection(newLightDirX, newLightDirY, newLightDirZ);
 
+	if (inDemo) {
+		FootprintDemo();
+	}
+
 	// Render the graphics.
 	result = render();
 	if (!result)
@@ -127,22 +146,32 @@ bool App1::render()
 	// Perform depth pass
 	depthPass();
 	gpuProfiler->CheckTimestamp(TIMESTAMP_DEPTH);
-
 	ComputePass();
-	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_WRITE);
-	WriteComputePass();
 	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_READ);
-
+	PenetrationPass();
+	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_PENETRATION);
+	JumpFloodingPass();
+	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_JUMPFLOOD);
+	DisplacementPass();
+	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_DISPLACE);
+	if (inIterativeDisplacement) {
+		VolumePreservationPass();
+	}
+	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_VOLUMEPRESERVE);
+	WriteComputePass();
+	gpuProfiler->CheckTimestamp(TIMESTAMP_COMPUTE_WRITE);
 	// Render scene
 	finalPass();
 	gpuProfiler->CheckTimestamp(TIMESTAMP_SCENE);
 
 	gpuProfiler->DataWaitandUpdate();
 	
+	VolumePreservationTest();
+	
 	renderer->endScene();
 	gpuProfiler->EndFrame();
 
-	//VolumePreservationTest();
+	
 	return true;
 }
 
@@ -156,34 +185,34 @@ void App1::depthPass()
 	XMMATRIX lightProjectionMatrix = depthCamera->getOrthoMatrix();
 
 	XMMATRIX worldMatrix = renderer->getWorldMatrix();
-	
+	worldMatrix = XMMatrixTranslation(0, 0, 0);
+
 	// Render floor
 	mesh->sendData(renderer->getDeviceContext());
 	depthShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, lightViewMatrix, lightProjectionMatrix, writeComputeShader->getSRV(),
-		textureMgr->getTexture(L"black"), deformationMap->getDepthMapSRV(), scale);
+		textureMgr->getTexture(L"black"), textureMgr->getTexture(L"black"), scale);
 	depthShader->render(renderer->getDeviceContext(), mesh->getIndexCount());
 
+	// Render models
 	worldMatrix = renderer->getWorldMatrix();
-	worldMatrix = XMMatrixTranslation(teapotX + 10, teapotY, teapotZ);
-	//XMMATRIX scaleMatrix = XMMatrixScaling(15.5f, 15.5f, 15.5f);
-	//worldMatrix = XMMatrixMultiply(XMMatrixMultiply(worldMatrix, scaleMatrix), XMMatrixTranslation(teapotX + 10, teapotY, teapotZ));
-	// Render model
+	worldMatrix = XMMatrixTranslation(teapotX + 25, teapotY, teapotZ);
 	model->sendData(renderer->getDeviceContext());
 	depthShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, lightViewMatrix, lightProjectionMatrix, textureMgr->getTexture(L"black"),
 		textureMgr->getTexture(L"black"), textureMgr->getTexture(L"black"), 0);
 	depthShader->render(renderer->getDeviceContext(), model->getIndexCount());
 
-	worldMatrix = XMMatrixTranslation(teapotX - 25, teapotY, teapotZ);
-	model->sendData(renderer->getDeviceContext());
+	worldMatrix = XMMatrixTranslation(footprintPositionA.x, footprintPositionA.y, footprintPositionA.z);
+	shoeA->sendData(renderer->getDeviceContext());
 	depthShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, lightViewMatrix, lightProjectionMatrix, textureMgr->getTexture(L"black"),
 		textureMgr->getTexture(L"black"), textureMgr->getTexture(L"black"), 0);
-	depthShader->render(renderer->getDeviceContext(), model->getIndexCount());
+	depthShader->render(renderer->getDeviceContext(), shoeB->getIndexCount());
 
-	worldMatrix = XMMatrixTranslation(teapotX + 45, teapotY, teapotZ);
-	model->sendData(renderer->getDeviceContext());
+	worldMatrix = XMMatrixTranslation(footprintPositionB.x, footprintPositionB.y, footprintPositionB.z);
+	shoeB->sendData(renderer->getDeviceContext());
 	depthShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, lightViewMatrix, lightProjectionMatrix, textureMgr->getTexture(L"black"),
 		textureMgr->getTexture(L"black"), textureMgr->getTexture(L"black"), 0);
-	depthShader->render(renderer->getDeviceContext(), model->getIndexCount());
+	depthShader->render(renderer->getDeviceContext(), shoeB->getIndexCount());
+
 
 	// Set back buffer as render target and reset view port.
 	renderer->setBackBufferRenderTarget();
@@ -193,34 +222,135 @@ void App1::depthPass()
 void App1::ComputePass() {
 
 	// Check if the compute pass has already been called
-	// if it hasnt, pass in a black image for the height map and the deformation map
-	// this compute shader then adds the two inputs together
-	if (!hasStarted) {
-		computeShader->setShaderParameters(renderer->getDeviceContext(), textureMgr->getTexture(L"black"), deformationMap->getDepthMapSRV());
-		computeShader->compute(renderer->getDeviceContext(), ceil(sWidth / 256.f), sHeight, 1);
+	// if it hasnt, pass in a grey image for the height map, else the result of the compute shader so process can start agin with result of previous
+	if (!hasReset) {
+		computeShader->setShaderParameters(renderer->getDeviceContext(), textureMgr->getTexture(L"grey"));
+		computeShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
 		computeShader->unbind(renderer->getDeviceContext());
-		hasStarted = true;
+		hasReset = true;
 	}
 
-	// if it has, pass in the result of the write compute pass and the the deformation map
-	else if (hasStarted) {
-		computeShader->setShaderParameters(renderer->getDeviceContext(), writeComputeShader->getSRV(), deformationMap->getDepthMapSRV());
-		computeShader->compute(renderer->getDeviceContext(), ceil(sWidth / 256.f), sHeight, 1);
+	else if (hasReset) {
+		computeShader->setShaderParameters(renderer->getDeviceContext(), writeComputeShader->getSRV());
+		computeShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
 		computeShader->unbind(renderer->getDeviceContext());
 	}
-
-	computeResult = computeShader->getSRV();
 }
+
+void App1::PenetrationPass()
+{
+	penetrationShader->setShaderParameters(renderer->getDeviceContext(), writeComputeShader->getSRV(), deformationMap->getDepthMapSRV());
+	penetrationShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+	penetrationShader->unbind(renderer->getDeviceContext());
+	
+}
+
+void App1::JumpFloodingPass()
+{
+	bool ping = true;
+	bool hasStarted = false;
+
+	jumpFloodInitShader->setShaderParameters(renderer->getDeviceContext(), penetrationShader->getSRV());
+	jumpFloodInitShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+	jumpFloodInitShader->unbind(renderer->getDeviceContext());
+
+	int totalCount = threadCountWidth * threadCountHeight;
+	for (int i = totalCount; i >= 1; i /= 2) {
+
+		if (ping) {
+			if (!hasStarted) {
+				// write compute pass is given the result of the standard compute pass and just outputs the same image
+				jumpFloodingShader->setShaderParameters(renderer->getDeviceContext(), jumpFloodInitShader->getSRV(), i);
+				jumpFloodingShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+				jumpFloodingShader->unbind(renderer->getDeviceContext());
+				hasStarted = true;
+				ping = false;
+			}
+			else {
+				// write compute pass is given the result of the standard compute pass and just outputs the same image
+				jumpFloodingShader->setShaderParameters(renderer->getDeviceContext(), pongJumpFLoodShader->getSRV(), i);
+				jumpFloodingShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+				jumpFloodingShader->unbind(renderer->getDeviceContext());
+				ping = false;
+			}
+		}
+		else {
+			// write compute pass is given the result of the standard compute pass and just outputs the same image
+			pongJumpFLoodShader->setShaderParameters(renderer->getDeviceContext(), jumpFloodingShader->getSRV(), i);
+			pongJumpFLoodShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+			pongJumpFLoodShader->unbind(renderer->getDeviceContext());
+			ping = true;
+		}
+	}
+}
+void App1::DisplacementPass() {
+
+	if (inIterativeDisplacement) {
+		displacementShader->setShaderParameters(renderer->getDeviceContext(), computeShader->getSRV(), jumpFloodingShader->getSRV(), penetrationShader->getSRV());
+		displacementShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+		displacementShader->unbind(renderer->getDeviceContext());
+	}
+	else {
+		displacementMethodBShader->setShaderParameters(renderer->getDeviceContext(), computeShader->getSRV(), jumpFloodingShader->getSRV(), penetrationShader->getSRV());
+		displacementMethodBShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+		displacementMethodBShader->unbind(renderer->getDeviceContext());
+	}
+}
+
+void App1::VolumePreservationPass()
+{
+	bool ping = true;
+	bool hasStarted = false;
+
+	for (int i = 0; i < 16; i++) {
+
+		if (ping) {
+			if (!hasStarted) {
+				volumePreservationShader->setShaderParameters(renderer->getDeviceContext(), computeShader->getSRV(), displacementShader->getSRV(), heightTreshold);
+				volumePreservationShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+				volumePreservationShader->unbind(renderer->getDeviceContext());
+				hasStarted = true;
+				ping = false;
+			}
+			else {
+				volumePreservationShader->setShaderParameters(renderer->getDeviceContext(), computeShader->getSRV(), volumePreservationPongShader->getSRV(),  heightTreshold);
+				volumePreservationShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+				volumePreservationShader->unbind(renderer->getDeviceContext());
+				ping = false;
+			}
+		}
+		else {
+			volumePreservationPongShader->setShaderParameters(renderer->getDeviceContext(), computeShader->getSRV(), volumePreservationShader->getSRV(), heightTreshold);
+			volumePreservationPongShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+			volumePreservationPongShader->unbind(renderer->getDeviceContext());
+			ping = true;
+		}
+	}
+}
+
+void App1::GenerateNormalsPass()
+{
+	normalMapShader->setShaderParameters(renderer->getDeviceContext(), writeComputeShader->getSRV(), jumpFloodingShader->getSRV(), computeShader->getSRV());
+	normalMapShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+	normalMapShader->unbind(renderer->getDeviceContext());
+
+}
+
 
 void App1::WriteComputePass() {
 
-	// write compute pass is given the result of the standard compute pass and just outputs the same image
-	writeComputeShader->setShaderParameters(renderer->getDeviceContext(), computeShader->getSRV());
-	writeComputeShader->compute(renderer->getDeviceContext(), ceil(sWidth / 256.f), sHeight, 1);
-	writeComputeShader->unbind(renderer->getDeviceContext());
-	hasStarted = true;
+	if (inIterativeDisplacement) {
+		writeComputeShader->setShaderParameters(renderer->getDeviceContext(), volumePreservationPongShader->getSRV());
+		writeComputeShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+		writeComputeShader->unbind(renderer->getDeviceContext());
+	}
+	else {
+		writeComputeShader->setShaderParameters(renderer->getDeviceContext(), displacementMethodBShader->getSRV());
+		writeComputeShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
+		writeComputeShader->unbind(renderer->getDeviceContext());
+	}
+	hasReset = true;
 }
-
 
 void App1::finalPass()
 {
@@ -233,46 +363,37 @@ void App1::finalPass()
 	XMMATRIX viewMatrix = camera->getViewMatrix();
 	XMMATRIX projectionMatrix = renderer->getProjectionMatrix();
 
-	//worldMatrix = XMMatrixTranslation(-50.f, 0.f, -10.f);
 	// Render floor
+	worldMatrix = renderer->getWorldMatrix();
+	worldMatrix = XMMatrixTranslation(0, 0, 0);
 	mesh->sendData(renderer->getDeviceContext());
+
 	manipulationShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, writeComputeShader->getSRV(),
-		textureMgr->getTexture(L"snowheight"), renderTexture->getShaderResourceView(), scale, directionalLight);
+		textureMgr->getTexture(L"surface"), scale, directionalLight);
 	manipulationShader->render(renderer->getDeviceContext(), mesh->getIndexCount());
 
 	// Render model
 	worldMatrix = renderer->getWorldMatrix();
-	worldMatrix = XMMatrixTranslation(teapotX + 10, teapotY, teapotZ);
-	//XMMATRIX scaleMatrix = XMMatrixScaling(5.5f, 5.5f, 5.5f);
-	//worldMatrix = XMMatrixMultiply(worldMatrix, scaleMatrix);
-	//XMMATRIX scaleMatrix = XMMatrixScaling(15.5f, 15.5f, 15.5f);
-	//worldMatrix = XMMatrixMultiply(XMMatrixMultiply(worldMatrix, scaleMatrix), XMMatrixTranslation(teapotX + 10, teapotY, teapotZ));
-
-	// Rendering Teapots
+	worldMatrix = XMMatrixTranslation(teapotX + 25, teapotY, teapotZ);
 	model->sendData(renderer->getDeviceContext());
-	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, textureMgr->getTexture(L"brick"));
+	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, textureMgr->getTexture(L"black"));
 	textureShader->render(renderer->getDeviceContext(), model->getIndexCount());
 
-	worldMatrix = XMMatrixTranslation(teapotX - 25, teapotY, teapotZ);
-	model->sendData(renderer->getDeviceContext());
-	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, textureMgr->getTexture(L"brick"));
-	textureShader->render(renderer->getDeviceContext(), model->getIndexCount());
+	worldMatrix = XMMatrixTranslation(footprintPositionA.x, footprintPositionA.y, footprintPositionA.z);
+	shoeA->sendData(renderer->getDeviceContext());
+	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, textureMgr->getTexture(L"black"));
+	textureShader->render(renderer->getDeviceContext(), shoeA->getIndexCount());
 
-	worldMatrix = XMMatrixTranslation(teapotX + 45, teapotY, teapotZ);
-	model->sendData(renderer->getDeviceContext());
-	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, textureMgr->getTexture(L"brick"));
-	textureShader->render(renderer->getDeviceContext(), model->getIndexCount());
-
+	worldMatrix = XMMatrixTranslation(footprintPositionB.x, footprintPositionB.y, footprintPositionB.z);
+	shoeB->sendData(renderer->getDeviceContext());
+	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, viewMatrix, projectionMatrix, textureMgr->getTexture(L"black"));
+	textureShader->render(renderer->getDeviceContext(), shoeB->getIndexCount());
 
 	renderer->setZBuffer(false);
 	worldMatrix = renderer->getWorldMatrix();
 	XMMATRIX orthoMatrix = renderer->getOrthoMatrix();  // ortho matrix for 2D rendering
 	XMMATRIX orthoViewMatrix = camera->getOrthoViewMatrix();	// Default camera position for orthographic rendering
 
-	orthoMesh->sendData(renderer->getDeviceContext());
-	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, orthoViewMatrix, orthoMatrix, deformationMap->getDepthMapSRV() /*renderTexture->getShaderResourceView()*/);
-	textureShader->render(renderer->getDeviceContext(), orthoMesh->getIndexCount());
-	
 	orthoMeshLeft->sendData(renderer->getDeviceContext());
 	textureShader->setShaderParameters(renderer->getDeviceContext(), worldMatrix, orthoViewMatrix, orthoMatrix, writeComputeShader->getSRV());
 	textureShader->render(renderer->getDeviceContext(), orthoMeshLeft->getIndexCount());
@@ -284,14 +405,45 @@ void App1::finalPass()
 
 bool App1::VolumePreservationTest()
 {
-	vpTestShader->setShaderParameters(renderer->getDeviceContext(), nullptr, nullptr, 0, computeShader->getSRV(), volume);
-	vpTestShader->compute(renderer->getDeviceContext(), ceil(sWidth / 256.f), sHeight, 1);
+	vpTestShader->setShaderParameters(renderer->getDeviceContext(), writeComputeShader->getSRV(), volume);
+	vpTestShader->compute(renderer->getDeviceContext(), threadCountWidth, threadCountHeight, 1);
 	vpTestShader->unbind(renderer->getDeviceContext());
-
-	if (vpTestShader->ReadFromGPU(renderer->getDevice(), renderer->getDeviceContext())) {
-		int asdf = 0;
-	}
 	return true;
+}
+
+void App1::FootprintDemo()
+{
+
+	FootprintMovement(downA, heightA, footprintPositionA);
+	FootprintMovement(downB, heightB, footprintPositionB);
+
+	if (!hasReset) {
+		footprintPositionA = XMFLOAT4(20, 0, -10, 0);
+		footprintPositionB = XMFLOAT4(10, 12.1, -30, 0);
+	}
+}
+
+void App1::FootprintMovement(bool& direction, float& height, XMFLOAT4& vector)
+{
+
+	if (height <= 4) {
+		direction = true;
+	}
+	if (height > 12) {
+		direction = false;
+	}
+
+	if (direction) {
+		height += timer->getTime() * 8;
+	}
+	else {
+		height -= timer->getTime() * 8;
+	}
+	if (height > 8) {
+		vector.z += timer->getTime() * 23;
+	}
+	vector.y = height;
+
 }
 
 void App1::gui()
@@ -300,24 +452,16 @@ void App1::gui()
 	renderer->getDeviceContext()->GSSetShader(NULL, NULL, 0);
 	renderer->getDeviceContext()->HSSetShader(NULL, NULL, 0);
 	renderer->getDeviceContext()->DSSetShader(NULL, NULL, 0);
-
 	// Build UI
-	ImGui::Text("FPS: %.2f", timer->getFPS());
+	ImGui::Text("Volume: %.5f", vpTestShader->totalVolume);
 	ImGui::Checkbox("Wireframe mode", &wireframeToggle);
-	ImGui::SliderFloat("Scale: ", &scale, 0.f, 25.f);
-	ImGui::SliderFloat("Move: ", &teapotX, 0.f, 100.f);
-	ImGui::SliderFloat("NewLight X: ", &newLightDirX, -1.f, 1.f);
-	ImGui::SliderFloat("NewLight Y: ", &newLightDirY, -1.f, 1.f);
-	ImGui::SliderFloat("NewLight Z: ", &newLightDirZ, -1.f, 1.f);
-	ImGui::SliderFloat("Teapot X: ", &teapotX, -100.f, 100.f);
-	ImGui::SliderFloat("Teapot Y: ", &teapotY, -5.f, 100.f);
-	ImGui::SliderFloat("TEapot Z: ", &teapotZ, -100.f, 100.f);
-	ImGui::SliderFloat("DepthCamera X: ", &depthLightX, -100.f, 100.f);
-	ImGui::SliderFloat("DepthCamera Y: ", &depthLightY, -100.f, 100.f);
-	ImGui::SliderFloat("DepthCamera Z: ", &depthLightZ, -100.f, 100.f);
-	ImGui::SliderFloat("DepthDir X: ", &depthDirX,-360.f, 360.f);
-	ImGui::SliderFloat("DepthDir Y: ", &depthDirY,-360.f, 360.f);
-	ImGui::SliderFloat("DepthDir Z: ", &depthDirZ,-360.f, 360.f);
+	ImGui::Checkbox("Demo mode", &inDemo);
+	ImGui::Checkbox("Iterative Displacement Mode", &inIterativeDisplacement);
+	ImGui::Checkbox("Reset", &hasReset);
+	ImGui::SliderFloat("Height Treshold: ", &heightTreshold, 0.f, .750f);
+	ImGui::SliderFloat("Object X: ", &teapotX, -100.f, 100.f);
+	ImGui::SliderFloat("Object Y: ", &teapotY, 4.f, 100.f);
+	ImGui::SliderFloat("Object Z: ", &teapotZ, -100.f, 100.f);
 
 	float totalTime = 0.0f;
 	for (TIMESTAMP timestamp = TIMESTAMP_BEGIN; timestamp < TIMESTAMP_TOTAL; timestamp = TIMESTAMP(timestamp + 1)) {
@@ -327,14 +471,24 @@ void App1::gui()
 	ImGui::Text("Draw time: %0.2f ms\n"
 		"   DEPTH: %0.2f ms\n"
 		"   COMPUTE READ: %0.2f ms\n"
+		"   COMPUTE PENETRATION: %0.2f ms\n"
+		"   COMPUTE JUMP FLOOD: %0.2f ms\n"
+		"   COMPUTE DISPLACMENT: %0.2f ms\n"
+		"   COMPUTE VOLUME: %0.2f ms\n"
 		"   COMPUTE WRITE: %0.2f ms\n"
-		"   SCENE: %0.2f ms\n"
-		"GPU frame time: %0.2f ms\n",
+		"   SCENE: %0.2f ms\n",
+
 		1000.0f * totalTime,
 		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_DEPTH),
-		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_WRITE),
 		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_READ),
+		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_PENETRATION),
+		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_JUMPFLOOD),
+		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_DISPLACE),
+		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_VOLUMEPRESERVE),
+		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_COMPUTE_WRITE),
 		1000.0f * gpuProfiler->GetAvgTimings(TIMESTAMP_SCENE));
+
+	ImGui::Text("FPS: %.2f", timer->getFPS());
 
 	// Render UI
 	ImGui::Render();
